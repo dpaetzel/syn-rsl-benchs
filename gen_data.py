@@ -76,7 +76,7 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
         return np.sum(x * coeffs, axis=1) + intercepts
 
     # Noise is fixed per rule (also, assume same noise for each dimension).
-    std_noises = st.gamma(a=1.0, scale=1.0).rvs(n_components)
+    std_noises = st.gamma(a=1.0, scale=0.1).rvs(n_components)
 
     # One mixing coefficient per rule.
     mixing_weights = st.uniform().rvs(n_components)

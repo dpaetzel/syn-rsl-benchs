@@ -124,6 +124,14 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
                   color="C2",
                   linestyle="dashed",
                   label="component centers")
+
+        ax.hlines(
+            np.arange(min(y) - 0.1,
+                      min(y) - 0.1 - n_components * 0.1, -0.1),
+            centers - spreads, centers + spreads)
+
+        # TODO Paint rules directly into scatter plot
+
         ax.set_xlabel("inputs (X)")
         ax.set_ylabel("outputs (y)")
         ax.legend()

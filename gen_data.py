@@ -103,5 +103,33 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
     y = pd.Series(y).rename("y")
     print(pd.concat([X, y], axis=1).to_csv(index=False))
 
+    if dimensions == 1:
+        import matplotlib.pyplot as plt  # type: ignore
+        X = np.linspace(-1, 1, 1000)
+        y = []
+        for x in X:
+            y.append(output(x))
+
+        fig, ax = plt.subplots()
+        ax.scatter(X, y, label="data")
+        ax.plot(X,
+                st.norm(loc=center_crowded_region,
+                        scale=np.sqrt(cov_crowded_region)[0]).pdf(X),
+                color="C1",
+                linestyle="dotted",
+                label="crowdedness")
+        ax.vlines(centers.ravel(),
+                  ymin=min(y),
+                  ymax=max(y),
+                  color="C2",
+                  linestyle="dashed",
+                  label="component centers")
+        ax.set_xlabel("inputs (X)")
+        ax.set_ylabel("outputs (y)")
+        ax.legend()
+
+        plt.show()
+
+
 if __name__ == "__main__":
     cli()

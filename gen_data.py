@@ -1,7 +1,7 @@
-import numpy as np # type: ignore
+import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
-import click # type: ignore
-import scipy.stats as st # type: ignore
+import click  # type: ignore
+import scipy.stats as st  # type: ignore
 
 
 @click.command()
@@ -27,10 +27,13 @@ def cli(n_rules, dimensions, seed, n):
     # sense as a domain
 
     # Scale was determined visually.
-    center_crowded_region = st.norm(loc=0.0, scale=0.2).rvs(dimensions)
+    center_crowded_region = st.norm(
+        loc=0.0, scale=0.2).rvs(dimensions).reshape(dimensions)
 
     # Generate one less rule because we add a default rule later.
-    centers = st.multivariate_normal(mean=center_crowded_region, cov=1).rvs(n_rules - 1)
+    centers = st.multivariate_normal(mean=center_crowded_region,
+                                     cov=1).rvs(n_rules - 1).reshape(
+                                         n_rules - 1, dimensions)
 
     # TODO How much overlap do we want?
     spreads = st.uniform().rvs((n_rules - 1, dimensions))
@@ -88,7 +91,7 @@ def cli(n_rules, dimensions, seed, n):
         y.append(output(x))
 
     X = pd.DataFrame(X).rename(columns=lambda i: f"X{i}")
-    y= pd.Series(y).rename("y")
+    y = pd.Series(y).rename("y")
     print(pd.concat([X, y], axis=1).to_csv(index=False))
 
 if __name__ == "__main__":

@@ -66,8 +66,8 @@ def cli(n_rules, dimensions, seed, n):
         """
         return np.sum(x * coeffs, axis=1) + intercepts
 
-    # Noise is fixed per rule.
-    std_noises = st.norm(loc=0.0, scale=1.0).rvs(n_rules)
+    # Noise is fixed per rule (also, assume same noise for each dimension).
+    std_noises = st.gamma(a=1.0, scale=1.0).rvs(n_rules)
 
     # One mixing coefficient per rule.
     mixing_weights = st.uniform().rvs(n_rules)

@@ -38,9 +38,10 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
     cov_crowded_region = np.eye(dimensions) * (
         crowd_reg_radius**2 / st.chi2(df=dimensions).ppf(q=0.99))
 
-    # Generate lower and upper bounds (one less than we want to have rules in
-    # the end since we add a default rule later).
-    n_bounds = (n_components - 1) * 2
+    # Generate lower and upper bounds (one less than we need for all the rules
+    # in the end—we actually need `n_components + 1` different bounds—since we
+    # add a default rule later).
+    n_bounds = n_components
     bounds = st.multivariate_normal(
         mean=center_crowded_region,
         cov=cov_crowded_region).rvs(n_bounds).reshape(n_bounds, dimensions)
@@ -48,11 +49,19 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
     # Sort each dimension independently.
     bounds = np.sort(bounds.T, axis=1).T
 
-    # Pairs of bounds make up intervals.
-    intervals = bounds.reshape(n_components - 1, 2, dimensions)
+    # Pairs of bounds make up intervals. One interval ends where the next begins
+    # (we do not leave room in-between the components at this point).
+    intervals = np.hstack([bounds[:-1],
+                           bounds[1:]]).reshape(n_components - 1, 2,
+                                                dimensions)
 
     centers = (intervals[:, 0, :] + intervals[:, 1, :]) / 2
     spreads = (intervals[:, 1, :] - intervals[:, 0, :]) / 2
+
+    # Add some overlap. We reduce this with dimensionality so it doesn't get out
+    # of hand.
+    # TODO Re-check whether reducing spread scale like this is sensible
+    spreads += st.halfnorm(scale=0.01**dimensions).rvs(len(spreads)).reshape(len(spreads), 1)
 
     # Add a default rule so we don't have to check whether there is a rule
     # matching.
@@ -133,8 +142,9 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
                   label="component centers")
 
         ax.hlines(
-            np.arange(min(y) - 0.1,
-                      min(y) - 0.1 - n_components * 0.1, -0.1),
+            np.linspace(
+                min(y) - 0.1,
+                min(y) - 0.1 - n_components * 0.1, n_components),
             centers - spreads, centers + spreads)
 
         # TODO Paint rules directly into scatter plot

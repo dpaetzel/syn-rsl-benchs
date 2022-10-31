@@ -38,14 +38,21 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
     cov_crowded_region = np.eye(dimensions) * (
         crowd_reg_radius**2 / st.chi2(df=dimensions).ppf(q=0.99))
 
-    # Generate one less rule because we add a default rule later.
-    centers = st.multivariate_normal(
+    # Generate lower and upper bounds (one less than we want to have rules in
+    # the end since we add a default rule later).
+    n_bounds = (n_components - 1) * 2
+    bounds = st.multivariate_normal(
         mean=center_crowded_region,
-        cov=cov_crowded_region).rvs(n_components - 1).reshape(
-            n_components - 1, dimensions)
+        cov=cov_crowded_region).rvs(n_bounds).reshape(n_bounds, dimensions)
 
-    # TODO How much overlap do we want?
-    spreads = st.uniform().rvs((n_components - 1, dimensions))
+    # Sort each dimension independently.
+    bounds = np.sort(bounds.T, axis=1).T
+
+    # Pairs of bounds make up intervals.
+    intervals = bounds.reshape(n_components - 1, 2, dimensions)
+
+    centers = (intervals[:, 0, :] + intervals[:, 1, :]) / 2
+    spreads = (intervals[:, 1, :] - intervals[:, 0, :]) / 2
 
     # Add a default rule so we don't have to check whether there is a rule
     # matching.

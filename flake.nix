@@ -1,22 +1,20 @@
 {
-  description = "Flake";
+  inputs = {
+    # I typically use the exact nixpkgs set that I use for building my current
+    # system to avoid redundancy.
+    nixos-config.url = "github:dpaetzel/nixos-config";
+  };
 
-  inputs.nixpkgs.url =
-    # 2022-06-22
-    "github:NixOS/nixpkgs/0d68d7c857fe301d49cdcd56130e0beea4ecd5aa";
-
-  outputs = { self, nixpkgs }:
-    let system = "x86_64-linux";
-    in with import nixpkgs {
-      inherit system;
-    };
-
-    let python = python310;
+  outputs = { self, nixos-config }:
+    let
+      nixpkgs = nixos-config.inputs.nixpkgs;
+      system = "x86_64-linux";
+      pkgs = import nixpkgs { inherit system; };
+      python = pkgs.python310;
     in rec {
-
       devShell.${system} = pkgs.mkShell {
 
-        packages = with python.pkgs; [
+        buildInputs = with python.pkgs; [
           ipython
           python
 
@@ -29,7 +27,6 @@
           scipy
           seaborn
         ];
-
       };
     };
 }

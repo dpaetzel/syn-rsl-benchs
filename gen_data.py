@@ -1,7 +1,13 @@
+import sys
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
 import click  # type: ignore
 import scipy.stats as st  # type: ignore
+
+
+# https://stackoverflow.com/a/14981125/6936216
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
 
 
 @click.command()
@@ -34,9 +40,11 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
     # Scale was determined visually.
     center_crowded_region = st.norm(
         loc=0.0, scale=0.2).rvs(dimensions).reshape(dimensions)
+    eprint(f"Crowded region center:\n{center_crowded_region}\n")
 
     cov_crowded_region = np.eye(dimensions) * (
         crowd_reg_radius**2 / st.chi2(df=dimensions).ppf(q=0.99))
+    eprint(f"Crowded region covariance matrix:\n{cov_crowded_region}\n")
 
     # Generate lower and upper bounds (one less than we need for all the rules
     # in the end—we actually need `n_components + 1` different bounds—since we
@@ -61,12 +69,15 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
     # Add some overlap. We reduce this with dimensionality so it doesn't get out
     # of hand.
     # TODO Re-check whether reducing spread scale like this is sensible
-    spreads += st.halfnorm(scale=0.01**dimensions).rvs(len(spreads)).reshape(len(spreads), 1)
+    spreads += st.halfnorm(scale=0.01**dimensions).rvs(len(spreads)).reshape(
+        len(spreads), 1)
 
     # Add a default rule so we don't have to check whether there is a rule
     # matching.
     centers = np.vstack([np.repeat(0, dimensions), centers])
     spreads = np.vstack([np.repeat(1, dimensions), spreads])
+    eprint(f"Centers:\n{centers}\n")
+    eprint(f"Spreads:\n{spreads}\n")
 
     def match(x):
         """

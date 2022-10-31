@@ -21,7 +21,7 @@ import scipy.stats as st  # type: ignore
               type=int,
               help="Random seed to be used")
 @click.option("--crowd-reg-radius",
-              default=0.25,
+              default=1,
               type=float,
               help="99% radius of the crowded region")
 @click.argument("N", type=int)

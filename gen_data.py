@@ -168,8 +168,6 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
             for xy, width, height in zip(xys, widths, heights)
         ]
         pc = PatchCollection(boxes, cmap=matplotlib.cm.jet)
-        import as
-        import matplotlib.colors
         pc.set_array(100 * np.random.random(n_components - 1))
         ax.add_collection(pc)
         ax.set_xbound(lower=-1, upper=1)

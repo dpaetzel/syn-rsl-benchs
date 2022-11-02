@@ -121,10 +121,7 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
     # TODO Print how much overlap we have.
 
     X = st.uniform(loc=-1, scale=2).rvs((n, dimensions))
-
-    y = []
-    for x in X:
-        y.append(output(x))
+    y = [output(x) for x in X]
 
     X = pd.DataFrame(X).rename(columns=lambda i: f"X{i}")
     y = pd.Series(y).rename("y")

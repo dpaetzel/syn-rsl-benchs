@@ -31,18 +31,23 @@ def eprint(*args, **kwargs):
               default=1,
               type=int,
               help="Random seed to be used")
-@click.option("--crowd-reg-radius",
-              default=1,
-              type=float,
-              help="99% radius of the crowded region")
+@click.option("--restrict-overlap/--no-restrict-overlap",
+              default=False,
+              help="Whether to restrict overlap of the components")
 @click.argument("N", type=int)
-def cli(n_components, dimensions, seed, n, crowd_reg_radius):
+def cli(n_components, dimensions, seed, n, restrict_overlap):
+    if restrict_overlap:
+        raise NotImplementedError("Restricting overlap is not properly "
+                                  "calibrated to dimension right now.")
 
     np.random.seed(seed)
 
-    # Minimum volume of an inteval is the volume of a cuboid with an edge length
-    # of one tenth the input space extent.
-    volume_interval_min = ((1.0 - (-1.0)) / 10.0)**dimensions
+    volume_input_space = (1.0 - (-1.0))**dimensions
+
+    # Minimum interval volume is chosen to be a percentage of the volume per
+    # component.
+    factor = 1.0 / (n_components - 1) / 10.0
+    volume_interval_min = factor * volume_input_space
 
     def overlap(int1, int2):
         """
@@ -83,14 +88,72 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
         """
         Draw an interval with a volume of at least `volume_interval_min`.
         """
-        bounds = st.uniform(np.repeat(-1.0, dimensions), 2).rvs(
-            (2, dimensions))
+        # TODO Make spreads depend on the other already drawn intervals so we
+        # don't have to reject as many (i.e. if one dimension is already pretty
+        # full, consider to make drawn intervals small in that dimension)
 
-        # Sort each dimension independently.
-        interval = np.sort(bounds.T, axis=1).T
+        # TODO Consider making spread_min depend on dimension
+        spread_min = 0.1
+        # The hard maximum for interval spread in each dimension is 1.
+        #
+        # Beta distribution's a slightly larger then b in order to bias towards
+        # >0.5 (with a=12 and b=10, only 17%ish of probability mass is below
+        # 0.5) which leads to higher probability of spreads >1 which reduces
+        # pressure on the last interval (and thus less rejections).
+        # dist_spread = st.beta(12, 10, loc=spread_min, scale=1.0 - spread_min)
+        #
+        # Since we don't draw a fixed volume (and then compute a fixed width of
+        # the last dimension interval) but instead only compute a minimum width
+        # for the last dimension interval we may as well use a simple uniform
+        # distribution here.
+        dist_spread = st.uniform(spread_min, scale=1.0 - spread_min)
+        spreads = dist_spread.rvs(dimensions - 1)
 
-        if volume(interval) < volume_interval_min:
-            draw_interval()
+        centers = st.uniform(-1 + spreads, 2 - 2 * spreads).rvs(dimensions - 1)
+
+        interval = np.array([centers - spreads, centers + spreads])
+
+        # Compute the minimum width of the last interval.
+        min_width = volume_interval_min / volume(interval)
+
+        max_width = 1. - (-1.)
+
+        # While the minimum width computed is larger than the maximum width,
+        # redraw the smallest already chosen spread.
+        iter_max = 20
+        i = 0
+        while min_width > max_width and i < iter_max:
+            i += 1
+            eprint("Rejecting due to min width greater max width "
+                   f"({min_width} > {max_width}).")
+            i = np.argmin(spreads)
+            new_spread = dist_spread.rvs()
+            print(i, spreads[i], new_spread, spreads)
+            spreads[i] = new_spread
+            centers[i] = st.uniform(-1 + spreads[i], 2 - 2 * spreads[i]).rvs()
+
+            interval = np.array([centers - spreads, centers + spreads])
+            min_width = volume_interval_min / volume(interval)
+
+        if i >= iter_max:
+            eprint("Had to reject too many, aborting.")
+            sys.exit(1)
+
+        # Finally, we may draw a random width for the last interval.
+        width = st.uniform(min_width, scale=max_width - min_width).rvs()
+
+        # Compute the spread of the last interval.
+        spread = width / 2
+
+        # Draw the center for the last interval. In doing so, consider the
+        # interval's spread and don't go too close to the edge of the input
+        # space.
+        center = st.uniform(-1 + spread, 2 - 2 * spread).rvs()
+
+        # Append last dimension to the interval.
+        interval_last = [center - spread, center + spread]
+        interval = np.hstack(
+            [interval, np.array(interval_last)[:, np.newaxis]])
 
         return interval
 
@@ -98,24 +161,34 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
     overlaps = []
     volumes_overlaps = []
 
-    while len(intervals) < n_components - 1:
+    iter_max = 20
+    i = 0
+    while len(intervals) < n_components - 1 and i < iter_max:
+        i += 1
         interval = draw_interval()
         new_overlaps = []
         for existing_interval in intervals:
             new_overlaps.append(overlap(interval, existing_interval))
 
-        volume_overlap = np.sum(
-            [volume(overlap) for overlap in new_overlaps if overlap is not None])
+        volume_overlap = np.sum([
+            volume(overlap) for overlap in new_overlaps if overlap is not None
+        ])
         # Only use the interval if it adds overlap volume of at most the volume
         # of a cube having one tenth of the input space.
-        if volume_overlap < volume_interval_min:
+        if not restrict_overlap or volume_overlap <= volume_interval_min:
             intervals.append(interval)
             overlaps += [o for o in new_overlaps if o is not None]
             volumes_overlaps.append(volume_overlap)
+            i = 0
         else:
-            eprint(
-                f"Rejecting due to overlap of {volume_overlap} (currently {len(intervals)} intervals)"
-            )
+            eprint("Rejecting: Too much overlap with already chosen intervals "
+                   f"({volume_overlap:.2f} > {volume_interval_min:.2f}, "
+                   f"chose {len(intervals)} of "
+                   f"{n_components - 1} intervals so far).")
+
+    if i >= iter_max:
+        eprint("Had to reject too many, aborting.")
+        sys.exit(1)
 
     intervals = np.reshape(intervals, (n_components - 1, 2, dimensions))
 
@@ -128,8 +201,10 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
     spreads = np.vstack([np.repeat(1, dimensions), spreads])
     eprint(f"Centers:\n{centers}\n")
     eprint(f"Spreads:\n{spreads}\n")
+    eprint(f"Volumes:\n{[volume(i) for i in intervals]}\n")
 
-    eprint(f"Sum of overlaps:", sum(volumes_overlaps), "\n")
+    eprint(f"Minimum interval volume: {volume_interval_min}\n")
+    eprint(f"Sum of overlaps: {sum(volumes_overlaps)}\n")
 
     def match(x):
         """
@@ -170,10 +245,23 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
         noise = st.norm(loc=0.0, scale=std_noises).rvs()
         return np.sum(mixing * (f + noise))
 
-    # TODO Print how much overlap we have.
-
     X = st.uniform(loc=-1, scale=2).rvs((n, dimensions))
     y = [output(x) for x in X]
+
+    counts_match = np.sum([match(x) for x in X], axis=0)
+
+    eprint(f"Match counts: {counts_match}\n")
+
+    matchs = [match(x) for x in st.uniform(loc=-1, scale=2).rvs(500_000)]
+    # Drop the default rule entries.
+    matchs = np.array(matchs)[:, 1:]
+    # Count how many rules match each input.
+    matchs = np.sum(matchs, axis=1)
+    ratio_vol_covered = np.sum(matchs != 0) / len(matchs)
+
+    eprint(
+        f"Percentage of volume covered (MC approximation): {ratio_vol_covered * 100:.1f} %\n"
+    )
 
     X = pd.DataFrame(X).rename(columns=lambda i: f"X{i}")
     y = pd.Series(y).rename("y")
@@ -190,8 +278,8 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
     mae = mean_absolute_error(y, y_pred)
     mse = mean_squared_error(y, y_pred)
 
-    eprint("MAE", mae)
-    eprint("MSE", mse)
+    eprint(f"MAE (on training data): {mae:.2f}")
+    eprint(f"MSE (on training data): {mse:.2f}")
     eprint("\n")
 
     if dimensions == 2:
@@ -230,12 +318,6 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
 
         fig, ax = plt.subplots()
         ax.scatter(X, y, label="data")
-        ax.plot(X,
-                st.norm(loc=center_crowded_region,
-                        scale=np.sqrt(cov_crowded_region)[0]).pdf(X),
-                color="C1",
-                linestyle="dotted",
-                label="crowdedness")
         ax.vlines(centers.ravel(),
                   ymin=min(y),
                   ymax=max(y),

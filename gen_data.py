@@ -146,6 +146,37 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
     eprint("MSE", mse)
     eprint("\n")
 
+    if dimensions == 2:
+        import matplotlib.cm
+        import matplotlib.pyplot as plt  # type: ignore
+        from matplotlib.collections import PatchCollection  # type: ignore
+        from matplotlib.patches import Rectangle  # type: ignore
+
+        fig, ax = plt.subplots()
+
+        xys = intervals[:, 0, :]
+        widths = intervals[:, 1, 0] - intervals[:, 0, 0]
+        heights = intervals[:, 1, 1] - intervals[:, 0, 1]
+
+        # If we wanted to include the default rule, we could do this.
+        # xys = centers - spreads
+        # widths = 2 * spreads[:,0]
+        # heights = 2 * spreads[:,1]
+
+        boxes = [
+            Rectangle(xy, width, height)
+            for xy, width, height in zip(xys, widths, heights)
+        ]
+        pc = PatchCollection(boxes, cmap=matplotlib.cm.jet)
+        import as
+        import matplotlib.colors
+        pc.set_array(100 * np.random.random(n_components - 1))
+        ax.add_collection(pc)
+        ax.set_xbound(lower=-1, upper=1)
+        ax.set_ybound(lower=-1, upper=1)
+
+        plt.show()
+
     if dimensions == 1:
         import matplotlib.pyplot as plt  # type: ignore
         X = np.linspace(-1, 1, 1000)

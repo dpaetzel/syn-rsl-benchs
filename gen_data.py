@@ -95,19 +95,23 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
         return interval
 
     intervals = []
+    overlaps = []
+    volumes_overlaps = []
 
     while len(intervals) < n_components - 1:
         interval = draw_interval()
-        overlaps = []
+        new_overlaps = []
         for existing_interval in intervals:
-            overlaps.append(overlap(interval, existing_interval))
+            new_overlaps.append(overlap(interval, existing_interval))
 
         volume_overlap = np.sum(
-            [volume(overlap) for overlap in overlaps if overlap is not None])
+            [volume(overlap) for overlap in new_overlaps if overlap is not None])
         # Only use the interval if it adds overlap volume of at most the volume
         # of a cube having one tenth of the input space.
         if volume_overlap < volume_interval_min:
             intervals.append(interval)
+            overlaps += [o for o in new_overlaps if o is not None]
+            volumes_overlaps.append(volume_overlap)
         else:
             eprint(
                 f"Rejecting due to overlap of {volume_overlap} (currently {len(intervals)} intervals)"
@@ -124,6 +128,8 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
     spreads = np.vstack([np.repeat(1, dimensions), spreads])
     eprint(f"Centers:\n{centers}\n")
     eprint(f"Spreads:\n{spreads}\n")
+
+    eprint(f"Sum of overlaps:", sum(volumes_overlaps), "\n")
 
     def match(x):
         """

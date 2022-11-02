@@ -5,8 +5,9 @@ import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
 import scipy.stats as st  # type: ignore
 from sklearn.linear_model import LinearRegression  # type: ignore
-from sklearn.metrics import (mean_absolute_error,  # type: ignore
-                             mean_squared_error)
+from sklearn.metrics import (
+    mean_absolute_error,  # type: ignore
+    mean_squared_error)
 
 
 # https://stackoverflow.com/a/14981125/6936216
@@ -73,8 +74,10 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
     # Add some overlap. We reduce this with dimensionality so it doesn't get out
     # of hand.
     # TODO Re-check whether reducing spread scale like this is sensible
-    spreads += st.halfnorm(scale=0.01**dimensions).rvs(len(spreads)).reshape(
-        len(spreads), 1)
+    delta_spreads = st.halfnorm(scale=0.1**dimensions).rvs(
+        len(spreads)).reshape(len(spreads), 1)
+    eprint("Additional spread to introudce overlap", delta_spreads)
+    spreads += delta_spreads
 
     # Add a default rule so we don't have to check whether there is a rule
     # matching.
@@ -154,14 +157,12 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
 
         fig, ax = plt.subplots()
 
-        xys = intervals[:, 0, :]
-        widths = intervals[:, 1, 0] - intervals[:, 0, 0]
-        heights = intervals[:, 1, 1] - intervals[:, 0, 1]
-
-        # If we wanted to include the default rule, we could do this.
-        # xys = centers - spreads
-        # widths = 2 * spreads[:,0]
-        # heights = 2 * spreads[:,1]
+        # We remove the default rule here.
+        centers_ = centers[1:]
+        spreads_ = spreads[1:]
+        xys = centers_ - spreads_
+        widths = 2 * spreads_[:, 0]
+        heights = 2 * spreads_[:, 1]
 
         boxes = [
             Rectangle(xy, width, height)

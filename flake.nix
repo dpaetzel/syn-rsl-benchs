@@ -24,6 +24,7 @@
           networkx
           numpy
           pandas
+          scikit-learn
           scipy
           seaborn
         ];

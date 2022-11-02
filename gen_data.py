@@ -1,8 +1,12 @@
 import sys
+
+import click  # type: ignore
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
-import click  # type: ignore
 import scipy.stats as st  # type: ignore
+from sklearn.linear_model import LinearRegression  # type: ignore
+from sklearn.metrics import (mean_absolute_error,  # type: ignore
+                             mean_squared_error)
 
 
 # https://stackoverflow.com/a/14981125/6936216
@@ -126,6 +130,21 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
     X = pd.DataFrame(X).rename(columns=lambda i: f"X{i}")
     y = pd.Series(y).rename("y")
     print(pd.concat([X, y], axis=1).to_csv(index=False))
+
+    model = LinearRegression()
+    model.fit(X, y)
+
+    eprint("Linear model:")
+    eprint("coef_:", model.coef_)
+    eprint("intercept_:", model.intercept_)
+
+    y_pred = model.predict(X)
+    mae = mean_absolute_error(y, y_pred)
+    mse = mean_squared_error(y, y_pred)
+
+    eprint("MAE", mae)
+    eprint("MSE", mse)
+    eprint("\n")
 
     if dimensions == 1:
         import matplotlib.pyplot as plt  # type: ignore

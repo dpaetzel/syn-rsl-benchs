@@ -40,44 +40,83 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
 
     np.random.seed(seed)
 
-    # TODO Generate or configure the number of crowded regions first.
+    # Minimum volume of an inteval is the volume of a cuboid with an edge length
+    # of one tenth the input space extent.
+    volume_interval_min = ((1.0 - (-1.0)) / 10.0)**dimensions
 
-    # Scale was determined visually.
-    center_crowded_region = st.norm(
-        loc=0.0, scale=0.2).rvs(dimensions).reshape(dimensions)
-    eprint(f"Crowded region center:\n{center_crowded_region}\n")
+    def overlap(int1, int2):
+        """
+        Compute the overlap between the two intervals.
 
-    cov_crowded_region = np.eye(dimensions) * (
-        crowd_reg_radius**2 / st.chi2(df=dimensions).ppf(q=0.99))
-    eprint(f"Crowded region covariance matrix:\n{cov_crowded_region}\n")
+        Parameters
+        ----------
+        int1, int2: array
+            An array of shape (2, `dimensions`). I.e. `int1[0]` is the lower
+            bound and `int1[1]` is the upper bound of the interval.
 
-    # Generate lower and upper bounds (one less than we need for all the rules
-    # in the end—we actually need `n_components + 1` different bounds—since we
-    # add a default rule later).
-    n_bounds = n_components
-    bounds = st.multivariate_normal(
-        mean=center_crowded_region,
-        cov=cov_crowded_region).rvs(n_bounds).reshape(n_bounds, dimensions)
+        Returns
+        -------
+        array or None
+            If the intervals do not overlap, return `None`. Otherwise return the
+            overlap interval.
+        """
+        l1 = int1[0]
+        u1 = int1[1]
+        l2 = int2[0]
+        u2 = int2[1]
 
-    # Sort each dimension independently.
-    bounds = np.sort(bounds.T, axis=1).T
+        l = np.max([l1, l2], axis=0)
+        u = np.min([u1, u2], axis=0)
 
-    # Pairs of bounds make up intervals. One interval ends where the next begins
-    # (we do not leave room in-between the components at this point).
-    intervals = np.hstack([bounds[:-1],
-                           bounds[1:]]).reshape(n_components - 1, 2,
-                                                dimensions)
+        if np.any(u < l):
+            return None
+        else:
+            return np.vstack([l, u])
+
+    def volume(interval):
+        """
+        Compute the volume covered by the given interval.
+        """
+        return np.prod(interval[1] - interval[0])
+
+    def draw_interval():
+        """
+        Draw an interval with a volume of at least `volume_interval_min`.
+        """
+        bounds = st.uniform(np.repeat(-1.0, dimensions), 2).rvs(
+            (2, dimensions))
+
+        # Sort each dimension independently.
+        interval = np.sort(bounds.T, axis=1).T
+
+        if volume(interval) < volume_interval_min:
+            draw_interval()
+
+        return interval
+
+    intervals = []
+
+    while len(intervals) < n_components - 1:
+        interval = draw_interval()
+        overlaps = []
+        for existing_interval in intervals:
+            overlaps.append(overlap(interval, existing_interval))
+
+        volume_overlap = np.sum(
+            [volume(overlap) for overlap in overlaps if overlap is not None])
+        # Only use the interval if it adds overlap volume of at most the volume
+        # of a cube having one tenth of the input space.
+        if volume_overlap < volume_interval_min:
+            intervals.append(interval)
+        else:
+            eprint(
+                f"Rejecting due to overlap of {volume_overlap} (currently {len(intervals)} intervals)"
+            )
+
+    intervals = np.reshape(intervals, (n_components - 1, 2, dimensions))
 
     centers = (intervals[:, 0, :] + intervals[:, 1, :]) / 2
     spreads = (intervals[:, 1, :] - intervals[:, 0, :]) / 2
-
-    # Add some overlap. We reduce this with dimensionality so it doesn't get out
-    # of hand.
-    # TODO Re-check whether reducing spread scale like this is sensible
-    delta_spreads = st.halfnorm(scale=0.1**dimensions).rvs(
-        len(spreads)).reshape(len(spreads), 1)
-    eprint("Additional spread to introudce overlap", delta_spreads)
-    spreads += delta_spreads
 
     # Add a default rule so we don't have to check whether there is a rule
     # matching.
@@ -168,7 +207,7 @@ def cli(n_components, dimensions, seed, n, crowd_reg_radius):
             Rectangle(xy, width, height)
             for xy, width, height in zip(xys, widths, heights)
         ]
-        pc = PatchCollection(boxes, cmap=matplotlib.cm.jet)
+        pc = PatchCollection(boxes, cmap=matplotlib.cm.jet, alpha=0.8)
         pc.set_array(100 * np.random.random(n_components - 1))
         ax.add_collection(pc)
         ax.set_xbound(lower=-1, upper=1)

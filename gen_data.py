@@ -7,7 +7,8 @@ import scipy.stats as st  # type: ignore
 from sklearn.linear_model import LinearRegression  # type: ignore
 from sklearn.metrics import (
     mean_absolute_error,  # type: ignore
-    mean_squared_error)
+    mean_squared_error,
+    r2_score)
 
 
 # https://stackoverflow.com/a/14981125/6936216
@@ -277,9 +278,11 @@ def cli(n_components, dimension, seed, n, restrict_overlap):
     y_pred = model.predict(X)
     mae = mean_absolute_error(y, y_pred)
     mse = mean_squared_error(y, y_pred)
+    r2 = r2_score(y, y_pred)
 
     eprint(f"MAE (on training data): {mae:.2f}")
     eprint(f"MSE (on training data): {mse:.2f}")
+    eprint(f"R^2 (on training data): {r2:.2f}")
     eprint("\n")
 
     if dimension == 2:

@@ -22,10 +22,10 @@ def eprint(*args, **kwargs):
               type=int,
               help="Number of components to use")
 @click.option("-d",
-              "--dimensions",
+              "--dimension",
               default=1,
               type=int,
-              help="Number of input dimensions to generate data for")
+              help="Input dimension to generate data for")
 @click.option("-s",
               "--seed",
               default=1,
@@ -35,14 +35,14 @@ def eprint(*args, **kwargs):
               default=False,
               help="Whether to restrict overlap of the components")
 @click.argument("N", type=int)
-def cli(n_components, dimensions, seed, n, restrict_overlap):
+def cli(n_components, dimension, seed, n, restrict_overlap):
     if restrict_overlap:
         raise NotImplementedError("Restricting overlap is not properly "
                                   "calibrated to dimension right now.")
 
     np.random.seed(seed)
 
-    volume_input_space = (1.0 - (-1.0))**dimensions
+    volume_input_space = (1.0 - (-1.0))**dimension
 
     # Minimum interval volume is chosen to be a percentage of the volume per
     # component.
@@ -56,7 +56,7 @@ def cli(n_components, dimensions, seed, n, restrict_overlap):
         Parameters
         ----------
         int1, int2: array
-            An array of shape (2, `dimensions`). I.e. `int1[0]` is the lower
+            An array of shape (2, `dimension`). I.e. `int1[0]` is the lower
             bound and `int1[1]` is the upper bound of the interval.
 
         Returns
@@ -107,9 +107,9 @@ def cli(n_components, dimensions, seed, n, restrict_overlap):
         # for the last dimension interval we may as well use a simple uniform
         # distribution here.
         dist_spread = st.uniform(spread_min, scale=1.0 - spread_min)
-        spreads = dist_spread.rvs(dimensions - 1)
+        spreads = dist_spread.rvs(dimension - 1)
 
-        centers = st.uniform(-1 + spreads, 2 - 2 * spreads).rvs(dimensions - 1)
+        centers = st.uniform(-1 + spreads, 2 - 2 * spreads).rvs(dimension - 1)
 
         interval = np.array([centers - spreads, centers + spreads])
 
@@ -190,15 +190,15 @@ def cli(n_components, dimensions, seed, n, restrict_overlap):
         eprint("Had to reject too many, aborting.")
         sys.exit(1)
 
-    intervals = np.reshape(intervals, (n_components - 1, 2, dimensions))
+    intervals = np.reshape(intervals, (n_components - 1, 2, dimension))
 
     centers = (intervals[:, 0, :] + intervals[:, 1, :]) / 2
     spreads = (intervals[:, 1, :] - intervals[:, 0, :]) / 2
 
     # Add a default rule so we don't have to check whether there is a rule
     # matching.
-    centers = np.vstack([np.repeat(0, dimensions), centers])
-    spreads = np.vstack([np.repeat(1, dimensions), spreads])
+    centers = np.vstack([np.repeat(0, dimension), centers])
+    spreads = np.vstack([np.repeat(1, dimension), spreads])
     eprint(f"Centers:\n{centers}\n")
     eprint(f"Spreads:\n{spreads}\n")
     eprint(f"Volumes:\n{[volume(i) for i in intervals]}\n")
@@ -218,7 +218,7 @@ def cli(n_components, dimensions, seed, n, restrict_overlap):
         return np.all(conds, axis=1).astype(float)
 
     # d coefficients per rule.
-    coeffs = st.uniform(loc=-4, scale=8).rvs((n_components, dimensions))
+    coeffs = st.uniform(loc=-4, scale=8).rvs((n_components, dimension))
 
     # One intercept per rule.
     intercepts = st.uniform(loc=-4, scale=8).rvs(n_components)
@@ -245,7 +245,7 @@ def cli(n_components, dimensions, seed, n, restrict_overlap):
         noise = st.norm(loc=0.0, scale=std_noises).rvs()
         return np.sum(mixing * (f + noise))
 
-    X = st.uniform(loc=-1, scale=2).rvs((n, dimensions))
+    X = st.uniform(loc=-1, scale=2).rvs((n, dimension))
     y = [output(x) for x in X]
 
     counts_match = np.sum([match(x) for x in X], axis=0)
@@ -282,7 +282,7 @@ def cli(n_components, dimensions, seed, n, restrict_overlap):
     eprint(f"MSE (on training data): {mse:.2f}")
     eprint("\n")
 
-    if dimensions == 2:
+    if dimension == 2:
         import matplotlib.cm
         import matplotlib.pyplot as plt  # type: ignore
         from matplotlib.collections import PatchCollection  # type: ignore
@@ -309,7 +309,7 @@ def cli(n_components, dimensions, seed, n, restrict_overlap):
 
         plt.show()
 
-    if dimensions == 1:
+    if dimension == 1:
         import matplotlib.pyplot as plt  # type: ignore
         X = np.linspace(-1, 1, 1000)
         y = []

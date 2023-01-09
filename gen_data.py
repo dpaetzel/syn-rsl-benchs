@@ -56,7 +56,7 @@ def volume(interval):
 
 def draw_interval(dimension, volume_min):
     """
-    Draws an interval with a volume of at least `volume_interval_min`.
+    Draws a random interval with a volume of at least `volume_interval_min`.
 
     Parameters
     ----------
@@ -96,8 +96,8 @@ def draw_interval(dimension, volume_min):
 
     max_width = 1. - (-1.)
 
-    # While the minimum width computed is larger than the maximum width,
-    # redraw the smallest already chosen spread.
+    # While the minimum width computed for the last dimension is larger than the
+    # maximum width, redraw the smallest already chosen spread.
     iter_max = 20
     i = 0
     while min_width > max_width and i < iter_max:
@@ -106,7 +106,7 @@ def draw_interval(dimension, volume_min):
                f"({min_width} > {max_width}).")
         i = np.argmin(spreads)
         new_spread = dist_spread.rvs()
-        print(i, spreads[i], new_spread, spreads)
+        # eprint(i, spreads[i], new_spread, spreads)
         spreads[i] = new_spread
         centers[i] = st.uniform(-1 + spreads[i], 2 - 2 * spreads[i]).rvs()
 
@@ -117,14 +117,14 @@ def draw_interval(dimension, volume_min):
         eprint("Had to reject too many, aborting.")
         sys.exit(1)
 
-    # Finally, we may draw a random width for the last interval.
+    # Finally, we may draw a random width for the last dimension.
     width = st.uniform(min_width, scale=max_width - min_width).rvs()
 
-    # Compute the spread of the last interval.
+    # Compute the spread of the last dimension.
     spread = width / 2
 
-    # Draw the center for the last interval. In doing so, consider the
-    # interval's spread and don't go too close to the edge of the input
+    # Draw the center for the last dimension. In doing so, consider the
+    # spread in that dimension and don't go too close to the edge of the input
     # space.
     center = st.uniform(-1 + spread, 2 - 2 * spread).rvs()
 

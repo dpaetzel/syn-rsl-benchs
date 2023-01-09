@@ -47,6 +47,94 @@ def intersection(int1, int2):
         return np.vstack([l, u])
 
 
+def volume(interval):
+    """
+    Computes the volume of the given interval.
+    """
+    return np.prod(interval[1] - interval[0])
+
+
+def draw_interval(dimension, volume_min):
+    """
+    Draws an interval with a volume of at least `volume_interval_min`.
+
+    Parameters
+    ----------
+    dimension : int > 0
+        Dimension of the interval to be drawn.
+    volume_min : float
+        Minimum volume of the interval to be drawn.
+    """
+    # TODO Make spreads depend on the other already drawn intervals so we
+    # don't have to reject as many (i.e. if one dimension is already pretty
+    # full, consider to make drawn intervals small in that dimension)
+
+    # TODO Consider making spread_min depend on dimension
+    spread_min = 0.1
+    # The hard maximum for interval spread in each dimension is 1.
+    #
+    # Beta distribution's a is chosen to be slightly larger than b in order to
+    # bias towards >0.5 (with a=12 and b=10, only 17%ish of probability mass is
+    # below 0.5) which leads to higher probability of spreads >1 which reduces
+    # pressure on the last interval (and thus less rejections).
+    #
+    # dist_spread = st.beta(12, 10, loc=spread_min, scale=1.0 - spread_min)
+    #
+    # Since we don't draw a fixed volume (and then compute a fixed width of
+    # the last dimension interval) but instead only compute a minimum width
+    # for the last dimension interval we may as well use a simple uniform
+    # distribution here.
+    dist_spread = st.uniform(spread_min, scale=1.0 - spread_min)
+    spreads = dist_spread.rvs(dimension - 1)
+
+    centers = st.uniform(-1 + spreads, 2 - 2 * spreads).rvs(dimension - 1)
+
+    interval = np.array([centers - spreads, centers + spreads])
+
+    # Compute the minimum width of the last interval.
+    min_width = volume_min / volume(interval)
+
+    max_width = 1. - (-1.)
+
+    # While the minimum width computed is larger than the maximum width,
+    # redraw the smallest already chosen spread.
+    iter_max = 20
+    i = 0
+    while min_width > max_width and i < iter_max:
+        i += 1
+        eprint("Rejecting due to min width greater max width "
+               f"({min_width} > {max_width}).")
+        i = np.argmin(spreads)
+        new_spread = dist_spread.rvs()
+        print(i, spreads[i], new_spread, spreads)
+        spreads[i] = new_spread
+        centers[i] = st.uniform(-1 + spreads[i], 2 - 2 * spreads[i]).rvs()
+
+        interval = np.array([centers - spreads, centers + spreads])
+        min_width = volume_min / volume(interval)
+
+    if i >= iter_max:
+        eprint("Had to reject too many, aborting.")
+        sys.exit(1)
+
+    # Finally, we may draw a random width for the last interval.
+    width = st.uniform(min_width, scale=max_width - min_width).rvs()
+
+    # Compute the spread of the last interval.
+    spread = width / 2
+
+    # Draw the center for the last interval. In doing so, consider the
+    # interval's spread and don't go too close to the edge of the input
+    # space.
+    center = st.uniform(-1 + spread, 2 - 2 * spread).rvs()
+
+    # Append last dimension to the interval.
+    interval_last = [center - spread, center + spread]
+    interval = np.hstack([interval, np.array(interval_last)[:, np.newaxis]])
+
+    return interval
+
+
 @click.command()
 @click.option("-K",
               "--n-components",
@@ -81,85 +169,6 @@ def cli(n_components, dimension, seed, n, restrict_overlap):
     factor = 1.0 / (n_components - 1) / 10.0
     volume_interval_min = factor * volume_input_space
 
-    def volume(interval):
-        """
-        Compute the volume covered by the given interval.
-        """
-        return np.prod(interval[1] - interval[0])
-
-    def draw_interval():
-        """
-        Draw an interval with a volume of at least `volume_interval_min`.
-        """
-        # TODO Make spreads depend on the other already drawn intervals so we
-        # don't have to reject as many (i.e. if one dimension is already pretty
-        # full, consider to make drawn intervals small in that dimension)
-
-        # TODO Consider making spread_min depend on dimension
-        spread_min = 0.1
-        # The hard maximum for interval spread in each dimension is 1.
-        #
-        # Beta distribution's a slightly larger then b in order to bias towards
-        # >0.5 (with a=12 and b=10, only 17%ish of probability mass is below
-        # 0.5) which leads to higher probability of spreads >1 which reduces
-        # pressure on the last interval (and thus less rejections).
-        # dist_spread = st.beta(12, 10, loc=spread_min, scale=1.0 - spread_min)
-        #
-        # Since we don't draw a fixed volume (and then compute a fixed width of
-        # the last dimension interval) but instead only compute a minimum width
-        # for the last dimension interval we may as well use a simple uniform
-        # distribution here.
-        dist_spread = st.uniform(spread_min, scale=1.0 - spread_min)
-        spreads = dist_spread.rvs(dimension - 1)
-
-        centers = st.uniform(-1 + spreads, 2 - 2 * spreads).rvs(dimension - 1)
-
-        interval = np.array([centers - spreads, centers + spreads])
-
-        # Compute the minimum width of the last interval.
-        min_width = volume_interval_min / volume(interval)
-
-        max_width = 1. - (-1.)
-
-        # While the minimum width computed is larger than the maximum width,
-        # redraw the smallest already chosen spread.
-        iter_max = 20
-        i = 0
-        while min_width > max_width and i < iter_max:
-            i += 1
-            eprint("Rejecting due to min width greater max width "
-                   f"({min_width} > {max_width}).")
-            i = np.argmin(spreads)
-            new_spread = dist_spread.rvs()
-            print(i, spreads[i], new_spread, spreads)
-            spreads[i] = new_spread
-            centers[i] = st.uniform(-1 + spreads[i], 2 - 2 * spreads[i]).rvs()
-
-            interval = np.array([centers - spreads, centers + spreads])
-            min_width = volume_interval_min / volume(interval)
-
-        if i >= iter_max:
-            eprint("Had to reject too many, aborting.")
-            sys.exit(1)
-
-        # Finally, we may draw a random width for the last interval.
-        width = st.uniform(min_width, scale=max_width - min_width).rvs()
-
-        # Compute the spread of the last interval.
-        spread = width / 2
-
-        # Draw the center for the last interval. In doing so, consider the
-        # interval's spread and don't go too close to the edge of the input
-        # space.
-        center = st.uniform(-1 + spread, 2 - 2 * spread).rvs()
-
-        # Append last dimension to the interval.
-        interval_last = [center - spread, center + spread]
-        interval = np.hstack(
-            [interval, np.array(interval_last)[:, np.newaxis]])
-
-        return interval
-
     intervals = []
     overlaps = []
     volumes_overlaps = []
@@ -168,13 +177,15 @@ def cli(n_components, dimension, seed, n, restrict_overlap):
     i = 0
     while len(intervals) < n_components - 1 and i < iter_max:
         i += 1
-        interval = draw_interval()
+        interval = draw_interval(dimension=dimension,
+                                 volume_min=volume_interval_min)
         new_overlaps = []
         for existing_interval in intervals:
             new_overlaps.append(intersection(interval, existing_interval))
 
         volume_overlap = np.sum([
-            volume(intersect) for intersect in new_overlaps if intersect is not None
+            volume(intersect) for intersect in new_overlaps
+            if intersect is not None
         ])
         # Only use the interval if it adds overlap volume of at most the volume
         # of a cube having one tenth of the input space.

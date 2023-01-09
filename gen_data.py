@@ -153,6 +153,13 @@ def match(centers, spreads, x):
     return np.all(conds, axis=1).astype(float)
 
 
+def output_local(coeffs, intercepts, x):
+    """
+    Values of the `n_components` local models for the given input.
+    """
+    return np.sum(x * coeffs, axis=1) + intercepts
+
+
 @click.command()
 @click.option("-K",
               "--n-components",
@@ -244,12 +251,6 @@ def cli(n_components, dimension, seed, n, restrict_overlap):
     # One intercept per rule.
     intercepts = st.uniform(loc=-4, scale=8).rvs(n_components)
 
-    def output_local(x):
-        """
-        Values of the `n_components` local models for the given input.
-        """
-        return np.sum(x * coeffs, axis=1) + intercepts
-
     # Noise is fixed per rule (also, assume same noise for each dimension).
     std_noises = st.gamma(a=1.0, scale=0.1).rvs(n_components)
 
@@ -261,7 +262,7 @@ def cli(n_components, dimension, seed, n, restrict_overlap):
         Output of the overall model for the given input (including local noise).
         """
         m = match(centers=centers, spreads=spreads, x=x)
-        f = output_local(x)
+        f = output_local(coeffs=coeffs, intercepts=intercepts, x=x)
         mixing = (mixing_weights * m) / np.sum(mixing_weights * m)
         noise = st.norm(loc=0.0, scale=std_noises).rvs()
         return np.sum(mixing * (f + noise))

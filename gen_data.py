@@ -17,6 +17,36 @@ def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 
+def intersection(int1, int2):
+    """
+    Computes the intersection between two intervals.
+
+    Parameters
+    ----------
+    int1, int2: array
+        An array of shape (2, `dimension`). I.e. `int1[0]` is the lower
+        bound and `int1[1]` is the upper bound of the interval.
+
+    Returns
+    -------
+    array or None
+        If the intervals do not overlap, return `None`. Otherwise return the
+        intersection interval.
+    """
+    l1 = int1[0]
+    u1 = int1[1]
+    l2 = int2[0]
+    u2 = int2[1]
+
+    l = np.max([l1, l2], axis=0)
+    u = np.min([u1, u2], axis=0)
+
+    if np.any(u < l):
+        return None
+    else:
+        return np.vstack([l, u])
+
+
 @click.command()
 @click.option("-K",
               "--n-components",
@@ -50,35 +80,6 @@ def cli(n_components, dimension, seed, n, restrict_overlap):
     # component.
     factor = 1.0 / (n_components - 1) / 10.0
     volume_interval_min = factor * volume_input_space
-
-    def overlap(int1, int2):
-        """
-        Compute the overlap between the two intervals.
-
-        Parameters
-        ----------
-        int1, int2: array
-            An array of shape (2, `dimension`). I.e. `int1[0]` is the lower
-            bound and `int1[1]` is the upper bound of the interval.
-
-        Returns
-        -------
-        array or None
-            If the intervals do not overlap, return `None`. Otherwise return the
-            overlap interval.
-        """
-        l1 = int1[0]
-        u1 = int1[1]
-        l2 = int2[0]
-        u2 = int2[1]
-
-        l = np.max([l1, l2], axis=0)
-        u = np.min([u1, u2], axis=0)
-
-        if np.any(u < l):
-            return None
-        else:
-            return np.vstack([l, u])
 
     def volume(interval):
         """
@@ -170,10 +171,10 @@ def cli(n_components, dimension, seed, n, restrict_overlap):
         interval = draw_interval()
         new_overlaps = []
         for existing_interval in intervals:
-            new_overlaps.append(overlap(interval, existing_interval))
+            new_overlaps.append(intersection(interval, existing_interval))
 
         volume_overlap = np.sum([
-            volume(overlap) for overlap in new_overlaps if overlap is not None
+            volume(intersect) for intersect in new_overlaps if intersect is not None
         ])
         # Only use the interval if it adds overlap volume of at most the volume
         # of a cube having one tenth of the input space.

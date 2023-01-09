@@ -135,6 +135,24 @@ def draw_interval(dimension, volume_min):
     return interval
 
 
+def match(centers, spreads, x):
+    """
+    Values of the `n_components` matching functions for the given input.
+
+    Parameters
+    ----------
+    centers : array
+    spreads : array
+    x : array
+    """
+
+    # One condition per rule (rows) per dimension (columns).
+    conds = (centers - spreads <= x) & (x <= centers + spreads)
+
+    # A rule only matches if all its conditions are fulfilled.
+    return np.all(conds, axis=1).astype(float)
+
+
 @click.command()
 @click.option("-K",
               "--n-components",
@@ -220,17 +238,6 @@ def cli(n_components, dimension, seed, n, restrict_overlap):
     eprint(f"Minimum interval volume: {volume_interval_min}\n")
     eprint(f"Sum of overlaps: {sum(volumes_overlaps)}\n")
 
-    def match(x):
-        """
-        Values of the `n_components` matching functions for the given input.
-        """
-
-        # One condition per rule (rows) per dimension (columns).
-        conds = (centers - spreads <= x) & (x <= centers + spreads)
-
-        # A rule only matches if all its conditions are fulfilled.
-        return np.all(conds, axis=1).astype(float)
-
     # d coefficients per rule.
     coeffs = st.uniform(loc=-4, scale=8).rvs((n_components, dimension))
 
@@ -253,7 +260,7 @@ def cli(n_components, dimension, seed, n, restrict_overlap):
         """
         Output of the overall model for the given input (including local noise).
         """
-        m = match(x)
+        m = match(centers=centers, spreads=spreads, x=x)
         f = output_local(x)
         mixing = (mixing_weights * m) / np.sum(mixing_weights * m)
         noise = st.norm(loc=0.0, scale=std_noises).rvs()
@@ -262,11 +269,15 @@ def cli(n_components, dimension, seed, n, restrict_overlap):
     X = st.uniform(loc=-1, scale=2).rvs((n, dimension))
     y = [output(x) for x in X]
 
-    counts_match = np.sum([match(x) for x in X], axis=0)
+    counts_match = np.sum(
+        [match(centers=centers, spreads=spreads, x=x) for x in X], axis=0)
 
     eprint(f"Match counts: {counts_match}\n")
 
-    matchs = [match(x) for x in st.uniform(loc=-1, scale=2).rvs(500_000)]
+    matchs = [
+        match(centers=centers, spreads=spreads, x=x)
+        for x in st.uniform(loc=-1, scale=2).rvs(500_000)
+    ]
     # Drop the default rule entries.
     matchs = np.array(matchs)[:, 1:]
     # Count how many rules match each input.

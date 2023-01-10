@@ -141,6 +141,82 @@ def draw_interval(dimension, volume_min, random_state):
     return interval
 
 
+def draw_intervals(dimension, n_intervals, volume_min, random_state):
+    """
+    Parameters
+    ----------
+    dimension : int > 0
+    n_intervals : int > 0
+    volume_min : float > 0
+    random_state : np.random.RandomState
+
+    Returns
+    -------
+    array, list, list
+        The intervals as an array of shape `(n_intervals, 2, dimension)`, the
+        set of pair-wise intersections between the intervals, the set of volumes
+        of the non-empty ones of these pair-wise intersections.
+    """
+    intervals = []
+    overlaps = []
+    volumes_overlaps = []
+
+    iter_max = 20
+    i = 0
+    while len(intervals) < n_intervals and i < iter_max:
+        i += 1
+        interval = draw_interval(dimension=dimension,
+                                 volume_min=volume_min,
+                                 random_state=random_state)
+        new_overlaps = []
+        for existing_interval in intervals:
+            new_overlaps.append(intersection(interval, existing_interval))
+
+        volume_overlap = np.sum([
+            volume(intersect) for intersect in new_overlaps
+            if intersect is not None
+        ])
+        # Only use the interval if it adds overlap volume of at most the volume
+        # of a cube having one tenth of the input space.
+        if volume_overlap <= volume_min:
+            intervals.append(interval)
+            overlaps += [o for o in new_overlaps if o is not None]
+            volumes_overlaps.append(volume_overlap)
+            i = 0
+        else:
+            eprint("Rejecting: Too much overlap with already chosen intervals "
+                   f"({volume_overlap:.2f} > {volume_min:.2f}, "
+                   f"chose {len(intervals)} of "
+                   f"{n_intervals} intervals so far).")
+
+    if i >= iter_max:
+        eprint("Had to reject too many, aborting.")
+        sys.exit(1)
+
+    intervals = np.reshape(intervals, (n_intervals, 2, dimension))
+
+    return intervals, overlaps, volumes_overlaps
+
+
+def centers_spreads(intervals):
+    """
+    Parameters
+    ----------
+    intervals : array of shape (n_intervals, 2, dimension)
+        A set of intervals as a numpy array.
+
+    Returns
+    -------
+
+    array, array
+        Centers of the intervals, spreads of the intervals.
+    """
+    centers = (intervals[:, 0, :] + intervals[:, 1, :]) / 2.
+    spreads = (intervals[:, 1, :] - intervals[:, 0, :]) / 2.
+
+    return centers, spreads
+
+
 def match(centers, spreads, x):
     """
     Values of the `n_components` matching functions for the given input.
@@ -212,57 +288,30 @@ def cli(n_components, dimension, seed, n, restrict_overlap):
     factor = 1.0 / (n_components - 1) / 10.0
     volume_interval_min = factor * volume_input_space
 
-    intervals = []
-    overlaps = []
-    volumes_overlaps = []
+    intervals, overlaps, volumes_overlaps = draw_intervals(
+        dimension=dimension,
+        # One less so we can add a default rule later on.
+        n_intervals=n_components - 1,
+        volume_min=volume_interval_min,
+        random_state=random_state)
 
-    iter_max = 20
-    i = 0
-    while len(intervals) < n_components - 1 and i < iter_max:
-        i += 1
-        interval = draw_interval(dimension=dimension,
-                                 volume_min=volume_interval_min,
-                                 random_state=random_state)
-        new_overlaps = []
-        for existing_interval in intervals:
-            new_overlaps.append(intersection(interval, existing_interval))
-
-        volume_overlap = np.sum([
-            volume(intersect) for intersect in new_overlaps
-            if intersect is not None
-        ])
-        # Only use the interval if it adds overlap volume of at most the volume
-        # of a cube having one tenth of the input space.
-        if not restrict_overlap or volume_overlap <= volume_interval_min:
-            intervals.append(interval)
-            overlaps += [o for o in new_overlaps if o is not None]
-            volumes_overlaps.append(volume_overlap)
-            i = 0
-        else:
-            eprint("Rejecting: Too much overlap with already chosen intervals "
-                   f"({volume_overlap:.2f} > {volume_interval_min:.2f}, "
-                   f"chose {len(intervals)} of "
-                   f"{n_components - 1} intervals so far).")
-
-    if i >= iter_max:
-        eprint("Had to reject too many, aborting.")
-        sys.exit(1)
-
-    intervals = np.reshape(intervals, (n_components - 1, 2, dimension))
-
-    centers = (intervals[:, 0, :] + intervals[:, 1, :]) / 2
-    spreads = (intervals[:, 1, :] - intervals[:, 0, :]) / 2
+    centers, spreads = centers_spreads(intervals)
 
     # Add a default rule so we don't have to check whether there is a rule
     # matching.
+    #
+    # Important: Note that we do not add the default rule to `intervals`,
+    # `overlaps`, `volumes_overlaps`.
     centers = np.vstack([np.repeat(0, dimension), centers])
     spreads = np.vstack([np.repeat(1, dimension), spreads])
+
     eprint(f"Centers:\n{centers}\n")
     eprint(f"Spreads:\n{spreads}\n")
     eprint(f"Volumes:\n{[volume(i) for i in intervals]}\n")
 
     eprint(f"Minimum interval volume: {volume_interval_min}\n")
-    eprint(f"Sum of overlaps: {sum(volumes_overlaps)}\n")
+    eprint(f"Sum of all overlap volumes: {sum(volumes_overlaps)}\n")
+    eprint(f"Input space volume: {volume_input_space}\n")
 
     # d coefficients per rule.
     coeffs = st.uniform(loc=-4, scale=8).rvs((n_components, dimension),

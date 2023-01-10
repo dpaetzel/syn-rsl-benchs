@@ -279,6 +279,11 @@ def cli(n_components, dimension, seed, n, restrict_overlap):
     # One mixing coefficient per rule.
     mixing_weights = st.uniform().rvs(n_components, random_state=random_state)
 
+    # The mixing weight of the default rule should be much smaller than any
+    # other mixing weight.
+    mixing_weights = mixing_weights + 0.1
+    mixing_weights[0] = np.finfo(None).tiny
+
     X = st.uniform(loc=-1, scale=2).rvs((n, dimension),
                                         random_state=random_state)
     y = [

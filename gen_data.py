@@ -55,7 +55,7 @@ def volume(interval):
     return np.prod(interval[1] - interval[0])
 
 
-def draw_interval(dimension, volume_min, random_state):
+def draw_interval(dimension, spread_min, volume_min, random_state):
     """
     Draws a random interval with a volume of at least `volume_interval_min`.
 
@@ -63,23 +63,15 @@ def draw_interval(dimension, volume_min, random_state):
     ----------
     dimension : int > 0
         Dimension of the interval to be drawn.
+    spread_min : float
+        Minimum spread of the interval in all dimensions (the same for all
+        dimensions).
     volume_min : float
         Minimum volume of the interval to be drawn.
     """
-    # TODO Make spreads depend on the other already drawn intervals so we
-    # don't have to reject as many (i.e. if one dimension is already pretty
-    # full, consider to make drawn intervals small in that dimension)
-
-    # TODO Consider making spread_min depend on dimension
-    spread_min = 0.1
-    # The hard maximum for interval spread in each dimension is 1.
-    #
-    # Beta distribution's a is chosen to be slightly larger than b in order to
-    # bias towards >0.5 (with a=12 and b=10, only 17%ish of probability mass is
-    # below 0.5) which leads to higher probability of spreads >1 which reduces
-    # pressure on the last interval (and thus less rejections).
-    #
-    # dist_spread = st.beta(12, 10, loc=spread_min, scale=1.0 - spread_min)
+    # The hard maximum for interval spread in each dimension is 1. The upper
+    # bound of `st.uniform` is `loc + scale` which is why we do `1.0 -
+    # spread_min`.
     #
     # Since we don't draw a fixed volume (and then compute a fixed width of
     # the last dimension interval) but instead only compute a minimum width
@@ -94,19 +86,20 @@ def draw_interval(dimension, volume_min, random_state):
 
     interval = np.array([centers - spreads, centers + spreads])
 
-    # Compute the minimum width of the last interval.
-    min_width = volume_min / volume(interval)
+    # Compute the minimum width of the interval in the last dimension.
+    width_min = volume_min / volume(interval)
 
-    max_width = 1. - (-1.)
+    # TODO Move this to top level constant.
+    width_max = 1. - (-1.)
 
     # While the minimum width computed for the last dimension is larger than the
     # maximum width, redraw the smallest already chosen spread.
     iter_max = 20
     i = 0
-    while min_width > max_width and i < iter_max:
+    while width_min > width_max and i < iter_max:
         i += 1
         eprint("Rejecting due to min width greater max width "
-               f"({min_width} > {max_width}).")
+               f"({width_min} > {width_max}).")
         i = np.argmin(spreads)
         new_spread = dist_spread.rvs(random_state=random_state)
         # eprint(i, spreads[i], new_spread, spreads)
@@ -115,15 +108,15 @@ def draw_interval(dimension, volume_min, random_state):
             -1 + spreads[i], 2 - 2 * spreads[i]).rvs(random_state=random_state)
 
         interval = np.array([centers - spreads, centers + spreads])
-        min_width = volume_min / volume(interval)
+        width_min = volume_min / volume(interval)
 
     if i >= iter_max:
         eprint("Had to reject too many, aborting.")
         sys.exit(1)
 
     # Finally, we may draw a random width for the last dimension.
-    width = st.uniform(min_width, scale=max_width
-                       - min_width).rvs(random_state=random_state)
+    width = st.uniform(width_min, scale=width_max
+                       - width_min).rvs(random_state=random_state)
 
     # Compute the spread of the last dimension.
     spread = width / 2
@@ -161,11 +154,21 @@ def draw_intervals(dimension, n_intervals, volume_min, random_state):
     overlaps = []
     volumes_overlaps = []
 
+    volume_avg = (1 - (-1))**dimension / n_intervals
+    # If they were all cubes this is the spread in each dimension.
+    spread_ideal_cubes = volume_avg**(1.0 / dimension) / 2.0
+    spread_min = spread_ideal_cubes
+
     iter_max = 20
     i = 0
     while len(intervals) < n_intervals and i < iter_max:
         i += 1
+        # TODO Consider makeing spreads depend on the other already drawn
+        # intervals so we don't have to reject as many (i.e. if one dimension is
+        # already pretty full, consider to make drawn intervals small in that
+        # dimension)
         interval = draw_interval(dimension=dimension,
+                                 spread_min=spread_min,
                                  volume_min=volume_min,
                                  random_state=random_state)
         new_overlaps = []
@@ -178,24 +181,16 @@ def draw_intervals(dimension, n_intervals, volume_min, random_state):
         ])
         # Only use the interval if it adds overlap volume of at most the volume
         # of a cube having one tenth of the input space.
-        if volume_overlap <= volume_min:
-            intervals.append(interval)
-            overlaps += [o for o in new_overlaps if o is not None]
-            volumes_overlaps.append(volume_overlap)
-            i = 0
-        else:
-            eprint("Rejecting: Too much overlap with already chosen intervals "
-                   f"({volume_overlap:.2f} > {volume_min:.2f}, "
-                   f"chose {len(intervals)} of "
-                   f"{n_intervals} intervals so far).")
-
-    if i >= iter_max:
-        eprint("Had to reject too many, aborting.")
-        sys.exit(1)
+        intervals.append(interval)
+        overlaps += [o for o in new_overlaps if o is not None]
+        volumes_overlaps.append(volume_overlap)
 
     intervals = np.reshape(intervals, (n_intervals, 2, dimension))
 
     return intervals, overlaps, volumes_overlaps
+
+
+# TODO extract overlaps from previous function
 
 
 def centers_spreads(intervals):
@@ -235,23 +230,40 @@ def match(centers, spreads, x):
     return np.all(conds, axis=1).astype(float)
 
 
-def output_local(coeffs, intercepts, x):
+def outputs_local(coefs, intercepts, x):
     """
     Values of the `n_components` local models for the given input.
     """
-    return np.sum(x * coeffs, axis=1) + intercepts
+    return np.sum(x * coefs, axis=1) + intercepts
 
 
-def output(centers, spreads, coeffs, intercepts, mixing_weights, std_noises,
+def output_local(coefs, intercept, x):
+    """
+    Value of the local models defined by the given coefficients and intercept
+    for the given input.
+    """
+    # Note that we could also re-use `outputs_local` here by wrapping stuff into
+    # another array.
+    return x @ coefs + intercept
+
+
+def output(centers, spreads, coefs, intercepts, mixing_weights, std_noises,
            random_state, x):
     """
     Output of the overall model for the given input (including local noise).
     """
     m = match(centers=centers, spreads=spreads, x=x)
-    f = output_local(coeffs=coeffs, intercepts=intercepts, x=x)
-    mixing = (mixing_weights * m) / np.sum(mixing_weights * m)
-    noise = st.norm(loc=0.0, scale=std_noises).rvs(random_state=random_state)
-    return np.sum(mixing * (f + noise))
+
+    # Probability is 0 for all rules that do not match due to multiplication
+    # with `m`. Also, since we have a default rule, there will always be a
+    # matching rule and we won't divide by zero here.
+    p_responsible = (mixing_weights * m) / np.sum(mixing_weights * m)
+    idx = random_state.choice(len(centers), p=p_responsible)
+
+    y = output_local(coefs=coefs[idx], intercept=intercepts[idx], x=x)
+    noise = st.norm(loc=0.0,
+                    scale=std_noises[idx]).rvs(random_state=random_state)
+    return y + noise
 
 
 @click.command()
@@ -314,8 +326,8 @@ def cli(n_components, dimension, seed, n, restrict_overlap):
     eprint(f"Input space volume: {volume_input_space}\n")
 
     # d coefficients per rule.
-    coeffs = st.uniform(loc=-4, scale=8).rvs((n_components, dimension),
-                                             random_state=random_state)
+    coefs = st.uniform(loc=-4, scale=8).rvs((n_components, dimension),
+                                            random_state=random_state)
 
     # One intercept per rule.
     intercepts = st.uniform(loc=-4, scale=8).rvs(n_components,
@@ -338,7 +350,7 @@ def cli(n_components, dimension, seed, n, restrict_overlap):
     y = [
         output(centers=centers,
                spreads=spreads,
-               coeffs=coeffs,
+               coefs=coefs,
                intercepts=intercepts,
                mixing_weights=mixing_weights,
                std_noises=std_noises,
@@ -420,13 +432,13 @@ def cli(n_components, dimension, seed, n, restrict_overlap):
 
     if dimension == 1:
         import matplotlib.pyplot as plt  # type: ignore
-        X = np.linspace(-1, 1, 1000)
+        X = np.linspace(-1, 1, 1000).reshape(-1, 1)
         y = []
         for x in X:
             y.append(
                 output(centers=centers,
                        spreads=spreads,
-                       coeffs=coeffs,
+                       coefs=coefs,
                        intercepts=intercepts,
                        mixing_weights=mixing_weights,
                        std_noises=std_noises,

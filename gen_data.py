@@ -280,7 +280,8 @@ def output(centers, spreads, coefs, intercepts, mixing_weights, std_noises,
               type=int,
               help="Random seed to be used")
 @click.argument("N", type=int)
-def cli(n_components, dimension, seed, n):
+@click.argument("NPZ", type=click.Path(dir_okay=False, writable=True))
+def cli(n_components, dimension, seed, n, npz):
     """
     Build a model consisting of a set of components, use it to generate N data
     points and store the model parameters as well as the data points in the .npz
@@ -370,15 +371,28 @@ def cli(n_components, dimension, seed, n):
                x=x) for x in X
     ]
 
+    eprint(f"\nStoring generative model and data in {npz} …")
+    np.savez_compressed(npz,
+                        X=X,
+                        y=y,
+                        centers=centers,
+                        spreads=spreads,
+                        coefs=coefs,
+                        intercepts=intercepts,
+                        mixing_weights=mixing_weights,
+                        std_noises=std_noises)
+
     eprint("\nComputing match counts …")
     counts_match = np.sum(
         [match(centers=centers, spreads=spreads, x=x) for x in X], axis=0)
 
     eprint(f"Match counts: {counts_match}")
 
-    X = pd.DataFrame(X).rename(columns=lambda i: f"X{i}")
-    y = pd.Series(y).rename("y")
-    print(pd.concat([X, y], axis=1).to_csv(index=False))
+    stdout_csv = False
+    if stdout_csv:
+        X = pd.DataFrame(X).rename(columns=lambda i: f"X{i}")
+        y = pd.Series(y).rename("y")
+        print(pd.concat([X, y], axis=1).to_csv(index=False))
 
     eprint("\nChecking for data linearity by training a linear model …")
     model = make_pipeline(

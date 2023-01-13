@@ -279,14 +279,13 @@ def output(centers, spreads, coefs, intercepts, mixing_weights, std_noises,
               default=1,
               type=int,
               help="Random seed to be used")
-@click.option("--restrict-overlap/--no-restrict-overlap",
-              default=False,
-              help="Whether to restrict overlap of the components")
 @click.argument("N", type=int)
-def cli(n_components, dimension, seed, n, restrict_overlap):
-    if restrict_overlap:
-        raise NotImplementedError("Restricting overlap is not properly "
-                                  "calibrated to dimension right now.")
+def cli(n_components, dimension, seed, n):
+    """
+    Build a model consisting of a set of components, use it to generate N data
+    points and store the model parameters as well as the data points in the .npz
+    file NPZ.
+    """
 
     random_state = check_random_state(seed)
 
@@ -320,9 +319,23 @@ def cli(n_components, dimension, seed, n, restrict_overlap):
     eprint(f"Spreads:\n{spreads}\n")
     eprint(f"Volumes:\n{[volume(i) for i in intervals]}\n")
 
-    eprint(f"Minimum interval volume: {volume_interval_min}\n")
-    eprint(f"Sum of all overlap volumes: {volume_overlap}\n")
-    eprint(f"Input space volume: {volume_input_space}\n")
+    eprint(f"\nMinimum interval volume: {volume_interval_min}")
+    eprint(f"Sum of all overlap volumes: {volume_overlap}")
+    eprint(f"Input space volume: {volume_input_space}")
+
+    eprint("\nEstimating the percentage of volume covered …")
+    matchs = [
+        match(centers=centers, spreads=spreads, x=x)
+        for x in st.uniform(loc=-1, scale=2).rvs(500_000,
+                                                 random_state=random_state)
+    ]
+    # Drop the default rule entries.
+    matchs = np.array(matchs)[:, 1:]
+    # Count how many rules match each input.
+    matchs = np.sum(matchs, axis=1)
+    ratio_vol_covered = np.sum(matchs != 0) / len(matchs)
+    eprint(f"Percentage of volume covered (MC approximation): "
+           f"{ratio_vol_covered * 100:.1f} %")
 
     # d coefficients per rule.
     coefs = st.uniform(loc=-4, scale=8).rvs((n_components, dimension),
@@ -357,37 +370,23 @@ def cli(n_components, dimension, seed, n, restrict_overlap):
                x=x) for x in X
     ]
 
+    eprint("\nComputing match counts …")
     counts_match = np.sum(
         [match(centers=centers, spreads=spreads, x=x) for x in X], axis=0)
 
-    eprint(f"Match counts: {counts_match}\n")
-
-    matchs = [
-        match(centers=centers, spreads=spreads, x=x)
-        for x in st.uniform(loc=-1, scale=2).rvs(500_000,
-                                                 random_state=random_state)
-    ]
-    # Drop the default rule entries.
-    matchs = np.array(matchs)[:, 1:]
-    # Count how many rules match each input.
-    matchs = np.sum(matchs, axis=1)
-    ratio_vol_covered = np.sum(matchs != 0) / len(matchs)
-
-    eprint(
-        f"Percentage of volume covered (MC approximation): {ratio_vol_covered * 100:.1f} %\n"
-    )
+    eprint(f"Match counts: {counts_match}")
 
     X = pd.DataFrame(X).rename(columns=lambda i: f"X{i}")
     y = pd.Series(y).rename("y")
     print(pd.concat([X, y], axis=1).to_csv(index=False))
 
+    eprint("\nChecking for data linearity by training a linear model …")
     model = make_pipeline(
         StandardScaler(),
         TransformedTargetRegressor(regressor=LinearRegression(),
                                    transformer=StandardScaler()))
     model.fit(X, y)
 
-    eprint("Linear model:")
     eprint("coef_ (in standardized space):", model[1].regressor_.coef_)
     eprint("intercept_ (in standardized space):",
            model[1].regressor_.intercept_)
@@ -400,7 +399,6 @@ def cli(n_components, dimension, seed, n, restrict_overlap):
     eprint(f"MAE (on training data): {mae:.2f}")
     eprint(f"MSE (on training data): {mse:.2f}")
     eprint(f"R^2 (on training data): {r2:.2f}")
-    eprint("\n")
 
     if dimension == 2:
         import matplotlib.cm

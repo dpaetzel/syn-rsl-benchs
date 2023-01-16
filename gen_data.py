@@ -371,10 +371,25 @@ def cli(n_components, dimension, seed, n, npz):
                x=x) for x in X
     ]
 
+    X_test = st.uniform(loc=-1, scale=2).rvs((n, dimension), random_state=random_state)
+    y_test = [
+        output(centers=centers,
+               spreads=spreads,
+               coefs=coefs,
+               intercepts=intercepts,
+               mixing_weights=mixing_weights,
+               std_noises=std_noises,
+               random_state=random_state,
+               x=x) for x in X_test
+    ]
+
+
     eprint(f"\nStoring generative model and data in {npz} …")
     np.savez_compressed(npz,
                         X=X,
                         y=y,
+                        X_test=X_test,
+                        y_test=y_test,
                         centers=centers,
                         spreads=spreads,
                         coefs=coefs,

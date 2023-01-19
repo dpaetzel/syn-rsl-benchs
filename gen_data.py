@@ -383,20 +383,6 @@ def cli(n_components, dimension, seed, n, npz):
                x=x) for x in X_test
     ]
 
-
-    eprint(f"\nStoring generative model and data in {npz} …")
-    np.savez_compressed(npz,
-                        X=X,
-                        y=y,
-                        X_test=X_test,
-                        y_test=y_test,
-                        centers=centers,
-                        spreads=spreads,
-                        coefs=coefs,
-                        intercepts=intercepts,
-                        mixing_weights=mixing_weights,
-                        std_noises=std_noises)
-
     eprint("\nComputing match counts …")
     counts_match = np.sum(
         [match(centers=centers, spreads=spreads, x=x) for x in X], axis=0)
@@ -428,6 +414,22 @@ def cli(n_components, dimension, seed, n, npz):
     eprint(f"MAE (on training data): {mae:.2f}")
     eprint(f"MSE (on training data): {mse:.2f}")
     eprint(f"R^2 (on training data): {r2:.2f}")
+
+    eprint(f"\nStoring generative model and data in {npz} …")
+    np.savez_compressed(npz,
+                        X=X,
+                        y=y,
+                        X_test=X_test,
+                        y_test=y_test,
+                        centers=centers,
+                        spreads=spreads,
+                        coefs=coefs,
+                        intercepts=intercepts,
+                        mixing_weights=mixing_weights,
+                        std_noises=std_noises,
+                        linear_model_mae=mae,
+                        linear_model_mse=mse,
+                        linear_model_rsquared=r2)
 
     if dimension == 2:
         import matplotlib.cm

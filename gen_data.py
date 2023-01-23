@@ -19,6 +19,10 @@ def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 
+# Choose min and max such that data is uniformly distributed but standardized.
+X_MIN, X_MAX = -np.sqrt(3), np.sqrt(3)
+
+
 def intersection(int1, int2):
     """
     Computes the intersection between two intervals.
@@ -78,12 +82,11 @@ def draw_interval(dimension, spread_min, volume_min, random_state):
     # the last dimension interval) but instead only compute a minimum width
     # for the last dimension interval we may as well use a simple uniform
     # distribution here.
-    dist_spread = st.uniform(spread_min, scale=1.0 - spread_min)
+    dist_spread = st.uniform(spread_min, scale=X_MAX - spread_min)
     spreads = dist_spread.rvs(dimension - 1, random_state=random_state)
 
-    centers = st.uniform(-1 + spreads,
-                         2 - 2 * spreads).rvs(dimension - 1,
-                                              random_state=random_state)
+    centers = st.uniform(X_MIN + spreads, (X_MAX - X_MIN) - 2 * spreads).rvs(
+        dimension - 1, random_state=random_state)
 
     interval = np.array([centers - spreads, centers + spreads])
 
@@ -91,7 +94,7 @@ def draw_interval(dimension, spread_min, volume_min, random_state):
     width_min = volume_min / volume(interval)
 
     # TODO Move this to top level constant.
-    width_max = 1. - (-1.)
+    width_max = X_MAX - X_MIN
 
     # While the minimum width computed for the last dimension is larger than the
     # maximum width, redraw the smallest already chosen spread.
@@ -106,7 +109,8 @@ def draw_interval(dimension, spread_min, volume_min, random_state):
         # eprint(i, spreads[i], new_spread, spreads)
         spreads[i] = new_spread
         centers[i] = st.uniform(
-            -1 + spreads[i], 2 - 2 * spreads[i]).rvs(random_state=random_state)
+            X_MIN + spreads[i],
+            (X_MAX - X_MIN) - 2 * spreads[i]).rvs(random_state=random_state)
 
         interval = np.array([centers - spreads, centers + spreads])
         width_min = volume_min / volume(interval)
@@ -125,8 +129,8 @@ def draw_interval(dimension, spread_min, volume_min, random_state):
     # Draw the center for the last dimension. In doing so, consider the
     # spread in that dimension and don't go too close to the edge of the input
     # space.
-    center = st.uniform(-1 + spread,
-                        2 - 2 * spread).rvs(random_state=random_state)
+    center = st.uniform(X_MIN + spread, (X_MAX - X_MIN)
+                        - 2 * spread).rvs(random_state=random_state)
 
     # Append last dimension to the interval.
     interval_last = [center - spread, center + spread]
@@ -153,7 +157,7 @@ def draw_intervals(dimension, n_intervals, volume_min, random_state):
     """
     intervals = []
 
-    volume_avg = (1 - (-1))**dimension / n_intervals
+    volume_avg = (X_MAX - X_MIN)**dimension / n_intervals
     # If they were all cubes this is the spread in each dimension.
     spread_ideal_cubes = volume_avg**(1.0 / dimension) / 2.0
     spread_min = spread_ideal_cubes
@@ -290,7 +294,7 @@ def cli(n_components, dimension, seed, n, npz):
 
     random_state = check_random_state(seed)
 
-    volume_input_space = (1.0 - (-1.0))**dimension
+    volume_input_space = (X_MAX - X_MIN)**dimension
 
     # Minimum interval volume is chosen to be a percentage of the volume per
     # component.
@@ -313,8 +317,8 @@ def cli(n_components, dimension, seed, n, npz):
     #
     # Important: Note that we do not add the default rule to `intervals`,
     # `overlaps`, `volumes_overlaps`.
-    centers = np.vstack([np.repeat(0, dimension), centers])
-    spreads = np.vstack([np.repeat(1, dimension), spreads])
+    centers = np.vstack([np.repeat((X_MAX + X_MIN) / 2, dimension), centers])
+    spreads = np.vstack([np.repeat((X_MAX - X_MIN) / 2, dimension), spreads])
 
     eprint(f"Centers:\n{centers}\n")
     eprint(f"Spreads:\n{spreads}\n")
@@ -327,8 +331,8 @@ def cli(n_components, dimension, seed, n, npz):
     eprint("\nEstimating the percentage of volume covered …")
     matchs = [
         match(centers=centers, spreads=spreads, x=x)
-        for x in st.uniform(loc=-1, scale=2).rvs(500_000,
-                                                 random_state=random_state)
+        for x in st.uniform(loc=X_MIN, scale=X_MAX
+                            - X_MIN).rvs(500_000, random_state=random_state)
     ]
     # Drop the default rule entries.
     matchs = np.array(matchs)[:, 1:]
@@ -358,8 +362,9 @@ def cli(n_components, dimension, seed, n, npz):
     mixing_weights = mixing_weights + 0.1
     mixing_weights[0] = np.finfo(None).tiny
 
-    X = st.uniform(loc=-1, scale=2).rvs((n, dimension),
-                                        random_state=random_state)
+    X = st.uniform(loc=X_MIN, scale=X_MAX - X_MIN).rvs(
+        (n, dimension), random_state=random_state)
+
     y = [
         output(centers=centers,
                spreads=spreads,
@@ -371,7 +376,8 @@ def cli(n_components, dimension, seed, n, npz):
                x=x) for x in X
     ]
 
-    X_test = st.uniform(loc=-1, scale=2).rvs((n, dimension), random_state=random_state)
+    X_test = st.uniform(loc=X_MIN, scale=X_MAX - X_MIN).rvs(
+        (n, dimension), random_state=random_state)
     y_test = [
         output(centers=centers,
                spreads=spreads,
@@ -453,14 +459,14 @@ def cli(n_components, dimension, seed, n, npz):
         pc = PatchCollection(boxes, cmap=matplotlib.cm.jet, alpha=0.8)
         pc.set_array(100 * random_state.random(n_components - 1))
         ax.add_collection(pc)
-        ax.set_xbound(lower=-1, upper=1)
-        ax.set_ybound(lower=-1, upper=1)
+        ax.set_xbound(lower=X_MIN, upper=X_MAX)
+        ax.set_ybound(lower=X_MIN, upper=X_MAX)
 
         plt.show()
 
     if dimension == 1:
         import matplotlib.pyplot as plt  # type: ignore
-        X = np.linspace(-1, 1, 1000).reshape(-1, 1)
+        X = np.linspace(X_MIN, X_MAX, 1000).reshape(-1, 1)
         y = []
         for x in X:
             y.append(

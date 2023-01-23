@@ -81,7 +81,9 @@ def draw_interval(dimension, spread_min, volume_min, random_state):
     volume_min : float
         Minimum volume of the interval to be drawn.
     """
-    spreads = dist_spread.rvs(dimension - 1, random_state=random_state)
+    rates_spread = dist_spread.rvs(dimension - 1, random_state=random_state)
+    spread_max = (X_MAX - X_MIN) / 2
+    spreads = spread_min + rates_spread * (spread_max - spread_min)
 
     centers = st.uniform(X_MIN + spreads, (X_MAX - X_MIN) - 2 * spreads).rvs(
         dimension - 1, random_state=random_state)

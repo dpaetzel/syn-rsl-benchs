@@ -60,6 +60,13 @@ def volume(interval):
     return np.prod(interval[1] - interval[0])
 
 
+# This was chosen such that at least 90% of rules have a spread `s < 0.66
+# (s_\max - s_\min)`.  Also, 90% of rules should have a spread `s > s_\min + 0.1
+# s_\max` (i.e.  only 10% of rules should be in the first 10% of possible
+# spreads).
+dist_spread = st.beta(a=1.55, b=2.74)
+
+
 def draw_interval(dimension, spread_min, volume_min, random_state):
     """
     Draws a random interval with a volume of at least `volume_interval_min`.
@@ -74,15 +81,6 @@ def draw_interval(dimension, spread_min, volume_min, random_state):
     volume_min : float
         Minimum volume of the interval to be drawn.
     """
-    # The hard maximum for interval spread in each dimension is 1. The upper
-    # bound of `st.uniform` is `loc + scale` which is why we do `1.0 -
-    # spread_min`.
-    #
-    # Since we don't draw a fixed volume (and then compute a fixed width of
-    # the last dimension interval) but instead only compute a minimum width
-    # for the last dimension interval we may as well use a simple uniform
-    # distribution here.
-    dist_spread = st.uniform(spread_min, scale=X_MAX - spread_min)
     spreads = dist_spread.rvs(dimension - 1, random_state=random_state)
 
     centers = st.uniform(X_MIN + spreads, (X_MAX - X_MIN) - 2 * spreads).rvs(

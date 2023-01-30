@@ -420,9 +420,44 @@ def cli(n_components, dimension, seed, n, npz):
     mse = mean_squared_error(y, y_pred)
     r2 = r2_score(y, y_pred)
 
-    eprint(f"MAE (on training data): {mae:.2f}")
-    eprint(f"MSE (on training data): {mse:.2f}")
-    eprint(f"R^2 (on training data): {r2:.2f}")
+    eprint(f"MAE (linear model on training data): {mae:.2f}")
+    eprint(f"MSE (linear model on training data): {mse:.2f}")
+    eprint(f"R^2 (linear model on training data): {r2:.2f}")
+
+    eprint("\nChecking fit of best possible RSL model …")
+
+    def output_rsl(x):
+        """
+        Output of the best possible model for the given input (i.e. if we don't
+        know the actual responsibilities).
+        """
+        m = match(centers=centers, spreads=spreads, x=x)
+
+        # Probability is 0 for all rules that do not match due to multiplication
+        # with `m`. Also, since we have a default rule, there will always be a
+        # matching rule and we won't divide by zero here.
+        p_responsible = (mixing_weights * m) / np.sum(mixing_weights * m)
+
+        ys = outputs_local(coefs=coefs, intercepts=intercepts, x=x)
+
+        # Note that the noises of the different local models do not change the
+        # optimal prediction but only the uncertainty associated with it because
+        # of the mean of the sum of normal distributions is independent of their
+        # variances.
+
+        return ys @ p_responsible
+
+    y_pred = []
+    for x in X:
+        y_pred.append(output_rsl(x))
+
+    mae = mean_absolute_error(y, y_pred)
+    mse = mean_squared_error(y, y_pred)
+    r2 = r2_score(y, y_pred)
+
+    eprint(f"MAE (best RSL model on training data): {mae:.2f}")
+    eprint(f"MSE (best RSL model on training data): {mse:.2f}")
+    eprint(f"R^2 (best RSL model on training data): {r2:.2f}")
 
     eprint(f"\nStoring generative model and data in {npz} …")
     np.savez_compressed(npz,
@@ -481,9 +516,13 @@ def cli(n_components, dimension, seed, n, npz):
                        std_noises=std_noises,
                        random_state=random_state,
                        x=x))
+        y_pred = []
+        for x in X:
+            y_pred.append(output_rsl(x))
 
         fig, ax = plt.subplots()
-        ax.scatter(X, y, label="data")
+        ax.scatter(X, y, label="data", color="C0")
+        ax.plot(X, y_pred, label="best RSL model", color="C1")
         ax.vlines(centers.ravel(),
                   ymin=min(y),
                   ymax=max(y),
@@ -491,11 +530,13 @@ def cli(n_components, dimension, seed, n, npz):
                   linestyle="dashed",
                   label="component centers")
 
-        ax.hlines(
-            np.linspace(
-                min(y) - 0.1,
-                min(y) - 0.1 - n_components * 0.1, n_components),
-            centers - spreads, centers + spreads)
+        ax.hlines(np.linspace(
+            min(y) - 0.1,
+            min(y) - 0.1 - n_components * 0.1, n_components),
+                  centers - spreads,
+                  centers + spreads,
+                  color="C3",
+                  label="match functions")
 
         # TODO Paint rules directly into scatter plot
 

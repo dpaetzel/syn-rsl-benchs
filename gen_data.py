@@ -362,6 +362,9 @@ def cli(n_components, dimension, seed, n, npz):
     mixing_weights = mixing_weights + 0.1
     mixing_weights[0] = np.finfo(None).tiny
 
+    eprint(f"\nMixing weights:\n{mixing_weights}")
+    eprint(f"Std noises:\n{std_noises}")
+
     X = st.uniform(loc=X_MIN, scale=X_MAX - X_MIN).rvs(
         (n, dimension), random_state=random_state)
 

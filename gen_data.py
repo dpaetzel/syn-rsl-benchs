@@ -248,23 +248,44 @@ def output_local(coefs, intercept, x):
     return x @ coefs + intercept
 
 
-def output(centers, spreads, coefs, intercepts, mixing_weights, std_noises,
-           random_state, x):
+def output(centers,
+           spreads,
+           coefs,
+           intercepts,
+           mixing_weights,
+           std_noises,
+           random_state,
+           x,
+           moe_output=False):
     """
     Output of the overall model for the given input (including local noise).
+
+    Parameters
+    ----------
+    moe_output : bool
+        Whether to generate output based on the data model assumed by mixture of
+        experts (which is different from the data model assumed by RSL due to
+        the latter fitting local models independently of each other).
     """
     m = match(centers=centers, spreads=spreads, x=x)
 
-    # Probability is 0 for all rules that do not match due to multiplication
-    # with `m`. Also, since we have a default rule, there will always be a
-    # matching rule and we won't divide by zero here.
-    p_responsible = (mixing_weights * m) / np.sum(mixing_weights * m)
-    idx = random_state.choice(len(centers), p=p_responsible)
+    if not moe_output:
+        y = outputs_local(coefs=coefs, intercepts=intercepts, x=x)
+        mixing = (mixing_weights * m) / np.sum(mixing_weights * m)
+        noise = st.norm(loc=0.0,
+                        scale=std_noises).rvs(random_state=random_state)
+        return np.sum(mixing * (y + noise))
+    else:
+        # Probability is 0 for all rules that do not match due to multiplication
+        # with `m`. Also, since we have a default rule, there will always be a
+        # matching rule and we won't divide by zero here.
+        p_responsible = (mixing_weights * m) / np.sum(mixing_weights * m)
+        idx = random_state.choice(len(centers), p=p_responsible)
 
-    y = output_local(coefs=coefs[idx], intercept=intercepts[idx], x=x)
-    noise = st.norm(loc=0.0,
-                    scale=std_noises[idx]).rvs(random_state=random_state)
-    return y + noise
+        y = output_local(coefs=coefs[idx], intercept=intercepts[idx], x=x)
+        noise = st.norm(loc=0.0,
+                        scale=std_noises[idx]).rvs(random_state=random_state)
+        return y + noise
 
 
 def output_rsl(x, centers, spreads, coefs, intercepts, mixing_weights):

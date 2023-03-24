@@ -267,6 +267,28 @@ def output(centers, spreads, coefs, intercepts, mixing_weights, std_noises,
     return y + noise
 
 
+def output_rsl(x, centers, spreads, coefs, intercepts, mixing_weights):
+    """
+    Output of the best possible model for the given input (i.e. if we don't
+    know the actual responsibilities).
+    """
+    m = match(centers=centers, spreads=spreads, x=x)
+
+    # Probability is 0 for all rules that do not match due to multiplication
+    # with `m`. Also, since we have a default rule, there will always be a
+    # matching rule and we won't divide by zero here.
+    p_responsible = (mixing_weights * m) / np.sum(mixing_weights * m)
+
+    ys = outputs_local(coefs=coefs, intercepts=intercepts, x=x)
+
+    # Note that the noises of the different local models do not change the
+    # optimal prediction but only the uncertainty associated with it because
+    # of the mean of the sum of normal distributions is independent of their
+    # variances.
+
+    return ys @ p_responsible
+
+
 @click.command()
 @click.option("-K",
               "--n-components",
@@ -426,30 +448,15 @@ def cli(n_components, dimension, seed, n, npz):
 
     eprint("\nChecking fit of best possible RSL model …")
 
-    def output_rsl(x):
-        """
-        Output of the best possible model for the given input (i.e. if we don't
-        know the actual responsibilities).
-        """
-        m = match(centers=centers, spreads=spreads, x=x)
-
-        # Probability is 0 for all rules that do not match due to multiplication
-        # with `m`. Also, since we have a default rule, there will always be a
-        # matching rule and we won't divide by zero here.
-        p_responsible = (mixing_weights * m) / np.sum(mixing_weights * m)
-
-        ys = outputs_local(coefs=coefs, intercepts=intercepts, x=x)
-
-        # Note that the noises of the different local models do not change the
-        # optimal prediction but only the uncertainty associated with it because
-        # of the mean of the sum of normal distributions is independent of their
-        # variances.
-
-        return ys @ p_responsible
-
     y_pred = []
     for x in X:
-        y_pred.append(output_rsl(x))
+        y_pred.append(
+            output_rsl(x=x,
+                       centers=centers,
+                       spreads=spreads,
+                       coefs=coefs,
+                       intercepts=intercepts,
+                       mixing_weights=mixing_weights))
 
     mae = mean_absolute_error(y, y_pred)
     mse = mean_squared_error(y, y_pred)
@@ -518,7 +525,13 @@ def cli(n_components, dimension, seed, n, npz):
                        x=x))
         y_pred = []
         for x in X:
-            y_pred.append(output_rsl(x))
+            y_pred.append(
+                output_rsl(x=x,
+                           centers=centers,
+                           spreads=spreads,
+                           coefs=coefs,
+                           intercepts=intercepts,
+                           mixing_weights=mixing_weights))
 
         fig, ax = plt.subplots()
         ax.scatter(X, y, label="data", color="C0")

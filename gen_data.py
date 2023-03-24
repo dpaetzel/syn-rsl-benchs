@@ -310,7 +310,55 @@ def output_rsl(x, centers, spreads, coefs, intercepts, mixing_weights):
     return ys @ p_responsible
 
 
-@click.command()
+@click.group()
+def cli():
+    pass
+
+
+@cli.command()
+@click.option("-K",
+              "--n-components",
+              default=3,
+              type=int,
+              help="Number of components to use")
+@click.option("-d",
+              "--dimension",
+              default=1,
+              type=int,
+              help="Input dimension to generate data for")
+@click.option("--show",
+              default=False,
+              type=bool,
+              help="Whether to show a plot of the generated model and data")
+@click.option("-s",
+              "--startseed",
+              type=click.IntRange(min=0),
+              default=0,
+              show_default=True,
+              help="First seed to use for initializing RNGs")
+@click.option("-e",
+              "--endseed",
+              type=click.IntRange(min=0),
+              default=9,
+              show_default=True,
+              help="Last seed to use for initializing RNGs")
+@click.argument("N", type=int)
+@click.argument("NPZPREFIX")
+@click.pass_context
+def genmany(ctx, n_components, dimension, show, startseed, endseed, n,
+            npzprefix):
+    for seed in range(startseed, endseed + 1):
+        ctx.invoke(
+            gen,
+            n_components=n_components,
+            dimension=dimension,
+            seed=seed,
+            show=show,
+            n=n,
+            npz=f"{npzprefix}-K{n_components}-DX{dimension}-N{n}-{seed}.npz")
+
+
+@cli.command()
 @click.option("-K",
               "--n-components",
               default=3,
@@ -326,9 +374,13 @@ def output_rsl(x, centers, spreads, coefs, intercepts, mixing_weights):
               default=1,
               type=int,
               help="Random seed to be used")
+@click.option("--show",
+              default=False,
+              type=bool,
+              help="Whether to show a plot of the generated model and data")
 @click.argument("N", type=int)
 @click.argument("NPZ", type=click.Path(dir_okay=False, writable=True))
-def cli(n_components, dimension, seed, n, npz):
+def gen(n_components, dimension, seed, show, n, npz):
     """
     Build a model consisting of a set of components, use it to generate N data
     points and store the model parameters as well as the data points in the .npz
@@ -503,7 +555,7 @@ def cli(n_components, dimension, seed, n, npz):
                         linear_model_mse=mse,
                         linear_model_rsquared=r2)
 
-    if dimension == 2:
+    if dimension == 2 and show:
         import matplotlib.cm
         import matplotlib.pyplot as plt  # type: ignore
         from matplotlib.collections import PatchCollection  # type: ignore
@@ -530,7 +582,7 @@ def cli(n_components, dimension, seed, n, npz):
 
         plt.show()
 
-    if dimension == 1:
+    if dimension == 1 and show:
         import matplotlib.pyplot as plt  # type: ignore
         X = np.linspace(X_MIN, X_MAX, 1000).reshape(-1, 1)
         y = []
@@ -572,7 +624,7 @@ def cli(n_components, dimension, seed, n, npz):
                   color="C3",
                   label="match functions")
 
-        # TODO Paint rules directly into scatter plot
+        # TODO Paint rules directly into scatter plot, I have code for that
 
         ax.set_xlabel("inputs (X)")
         ax.set_ylabel("outputs (y)")

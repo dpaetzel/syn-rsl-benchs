@@ -511,13 +511,13 @@ def gen(n_components, dimension, seed, show, n, npz):
            model[1].regressor_.intercept_)
 
     y_pred = model.predict(X)
-    mae = mean_absolute_error(y, y_pred)
-    mse = mean_squared_error(y, y_pred)
-    r2 = r2_score(y, y_pred)
+    mae_linear = mean_absolute_error(y, y_pred)
+    mse_linear = mean_squared_error(y, y_pred)
+    r2_linear = r2_score(y, y_pred)
 
-    eprint(f"MAE (linear model on training data): {mae:.2f}")
-    eprint(f"MSE (linear model on training data): {mse:.2f}")
-    eprint(f"R^2 (linear model on training data): {r2:.2f}")
+    eprint(f"MAE (linear model on training data): {mae_linear:.2f}")
+    eprint(f"MSE (linear model on training data): {mse_linear:.2f}")
+    eprint(f"R^2 (linear model on training data): {r2_linear:.2f}")
 
     eprint("\nChecking fit of best possible RSL model …")
 
@@ -551,9 +551,12 @@ def gen(n_components, dimension, seed, show, n, npz):
                         intercepts=intercepts,
                         mixing_weights=mixing_weights,
                         std_noises=std_noises,
-                        linear_model_mae=mae,
-                        linear_model_mse=mse,
-                        linear_model_rsquared=r2)
+                        linear_model_mae=mae_linear,
+                        linear_model_mse=mse_linear,
+                        linear_model_rsquared=r2_linear,
+                        rsl_model_mae=mae,
+                        rsl_model_mse=mse,
+                        rsl_model_rsquared=r2)
 
     if dimension == 2 and show:
         import matplotlib.cm

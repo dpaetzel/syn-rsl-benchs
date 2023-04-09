@@ -510,17 +510,27 @@ def gen(n_components, dimension, seed, show, n, npz):
     eprint("intercept_ (in standardized space):",
            model[1].regressor_.intercept_)
 
+    y_test_pred = model.predict(X_test)
+    mae_linear = mean_absolute_error(y_test_pred, y_test)
+    mse_linear = mean_squared_error(y_test_pred, y_test)
     y_pred = model.predict(X)
-    mae_linear = mean_absolute_error(y, y_pred)
-    mse_linear = mean_squared_error(y, y_pred)
-    r2_linear = r2_score(y, y_pred)
+    r2_linear = r2_score(y_pred, y)
 
-    eprint(f"MAE (linear model on training data): {mae_linear:.2f}")
-    eprint(f"MSE (linear model on training data): {mse_linear:.2f}")
+    eprint(f"MAE (linear model on test data): {mae_linear:.2f}")
+    eprint(f"MSE (linear model on test data): {mse_linear:.2f}")
     eprint(f"R^2 (linear model on training data): {r2_linear:.2f}")
 
     eprint("\nChecking fit of best possible RSL model …")
 
+    y_test_pred = []
+    for x in X_test:
+        y_test_pred.append(
+            output_rsl(x=x,
+                       centers=centers,
+                       spreads=spreads,
+                       coefs=coefs,
+                       intercepts=intercepts,
+                       mixing_weights=mixing_weights))
     y_pred = []
     for x in X:
         y_pred.append(
@@ -531,12 +541,12 @@ def gen(n_components, dimension, seed, show, n, npz):
                        intercepts=intercepts,
                        mixing_weights=mixing_weights))
 
-    mae = mean_absolute_error(y, y_pred)
-    mse = mean_squared_error(y, y_pred)
-    r2 = r2_score(y, y_pred)
+    mae = mean_absolute_error(y_test_pred, y_test)
+    mse = mean_squared_error(y_test_pred, y_test)
+    r2 = r2_score(y_pred, y)
 
-    eprint(f"MAE (best RSL model on training data): {mae:.2f}")
-    eprint(f"MSE (best RSL model on training data): {mse:.2f}")
+    eprint(f"MAE (best RSL model on test data): {mae:.2f}")
+    eprint(f"MSE (best RSL model on test data): {mse:.2f}")
     eprint(f"R^2 (best RSL model on training data): {r2:.2f}")
 
     eprint(f"\nStoring generative model and data in {npz} …")

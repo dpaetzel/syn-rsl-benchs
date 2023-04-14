@@ -15,6 +15,8 @@
       devShell.${system} = pkgs.mkShell {
 
         buildInputs = with python.pkgs; [
+          pkgs.parallel
+
           ipython
           python
 

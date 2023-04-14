@@ -475,7 +475,7 @@ def gen(n_components, dimension, seed, show, n, npz):
     ]
 
     X_test = st.uniform(loc=X_MIN, scale=X_MAX - X_MIN).rvs(
-        (n, dimension), random_state=random_state)
+        (100 * n, dimension), random_state=random_state)
     y_test = [
         output(centers=centers,
                spreads=spreads,

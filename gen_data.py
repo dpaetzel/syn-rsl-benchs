@@ -567,7 +567,8 @@ def gen(n_components, dimension, seed, show, n, npz):
                         rsl_model_mae=mae,
                         rsl_model_mse=mse,
                         rsl_model_rsquared=r2,
-                        ratio_vol_covered=ratio_vol_covered)
+                        ratio_vol_covered=ratio_vol_covered,
+                        seed=seed)
 
     if dimension == 2 and show:
         import matplotlib.cm

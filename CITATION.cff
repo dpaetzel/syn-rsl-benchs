@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Pätzel"
+  given-names: "David"
+  orcid: "0000-0002-8238-8461"
+title: "syn-rsl-benchs"
+version: 1.0.0
+doi: 10.5281/zenodo.7919420
+date-released: 2023-05-10
